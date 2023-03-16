@@ -109,6 +109,7 @@ class RedisBase(BrokerBase):
         self.priority_steps = broker_options.get(
             'priority_steps', self.DEFAULT_PRIORITY_STEPS)
         self.sep = broker_options.get('sep', self.DEFAULT_SEP)
+        self.broker_prefix = broker_options.get('global_keyprefix', '')
 
     def _q_for_pri(self, queue, pri):
         if pri not in self.priority_steps:
@@ -119,7 +120,7 @@ class RedisBase(BrokerBase):
     def queues(self, names):
         queue_stats = []
         for name in names:
-            priority_names = [self._q_for_pri(
+            priority_names = [self.broker_prefix + self._q_for_pri(
                 name, pri) for pri in self.priority_steps]
             queue_stats.append({
                 'name': name,
@@ -168,7 +169,7 @@ class RedisSentinel(RedisBase):
         self.port = self.port or 26379
         self.vhost = self._prepare_virtual_host(self.vhost)
         self.master_name = self._prepare_master_name(broker_options)
-        self.redis = self._get_redis_client()
+        self.redis = self._get_redis_client(broker_options)
 
     def _prepare_virtual_host(self, vhost):
         if not isinstance(vhost, numbers.Integral):
@@ -194,8 +195,11 @@ class RedisSentinel(RedisBase):
             )
         return master_name
 
-    def _get_redis_client(self):
-        connection_kwargs = {'password': self.password}
+    def _get_redis_client(self, broker_options):
+        connection_kwargs = {
+            'password': self.password,
+            'sentinel_kwargs': broker_options.get('sentinel_kwargs')
+        }
         # TODO: get all sentinel hosts from Celery App config and use them to initialize Sentinel
         sentinel = redis.sentinel.Sentinel(
             [(self.host, self.port)], **connection_kwargs)
